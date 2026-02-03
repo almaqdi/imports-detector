@@ -209,37 +209,52 @@ export class ImportAnalyzer {
       return true;
     }
 
-    // Check if the target path is contained in the import path
+    // Check if the target path is contained in the import path (full path match)
     // This handles cases like:
-    // - "admin/dashboard" matches "src/admin/dashboard"
+    // - "src/admin/dashboard" matches "components/src/admin/dashboard"
+    // But NOT: "components" matches "src/admin/dashboard/components"
     if (importPath.includes(targetPathLower)) {
-      return true;
+      // Additional validation: must be a substantial match (at least 2 segments)
+      const targetSegments = targetPathLower.split('/').filter(s => s);
+      if (targetSegments.length >= 2) {
+        return true;
+      }
     }
 
     // Check if the import path is contained in the target path
     // This handles cases like:
     // - "../admin/dashboard" matches "admin/dashboard" (after normalization)
+    // But it must be a significant portion of the path
     if (targetPathLower.includes(importPath)) {
-      return true;
+      // Only match if import path is substantial (at least 2 segments)
+      const importSegments = importPath.split('/').filter(s => s);
+      if (importSegments.length >= 2) {
+        return true;
+      }
     }
 
-    // Check if path segments match (more strict comparison)
+    // Check if path segments match from the end (filename matching)
     const importSegments = importPath.split('/').filter(s => s);
     const targetSegments = targetPathLower.split('/').filter(s => s);
 
-    // Must match at least the target path segments
-    if (targetSegments.length > 0) {
-      // Check if all target segments appear in order in the import path
-      let targetIndex = 0;
-      for (const importSegment of importSegments) {
-        if (importSegment === targetSegments[targetIndex]) {
-          targetIndex++;
-          if (targetIndex === targetSegments.length) {
-            // All target segments matched
-            return true;
-          }
+    // Match if the last 2+ segments match
+    if (importSegments.length >= 2 && targetSegments.length >= 2) {
+      let matchCount = 0;
+      const minLen = Math.min(importSegments.length, targetSegments.length);
+
+      for (let i = 1; i <= minLen; i++) {
+        const importSegment = importSegments[importSegments.length - i];
+        const targetSegment = targetSegments[targetSegments.length - i];
+
+        if (importSegment === targetSegment) {
+          matchCount++;
+        } else {
+          break;
         }
       }
+
+      // Require at least 2 matching segments (folder + filename)
+      return matchCount >= 2;
     }
 
     return false;
