@@ -28,12 +28,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/almaqdi/imports-detector.git"
   },
   "bugs": {
-    "url": ""
+    "url": "https://github.com/almaqdi/imports-detector/issues"
   },
-  "homepage": "",
+  "homepage": "https://github.com/al-maqdi/imports-detector#readme",
   "dependencies": {
     "@babel/parser": "^7.25.4",
     "@babel/traverse": "^7.25.4",

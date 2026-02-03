@@ -3,7 +3,7 @@
 [![npm version](https://badge.fury.io/js/imports-detector.svg)](https://www.npmjs.com/package/imports-detector)
 [![npm downloads](https://img.shields.io/npm/dm/imports-detector.svg)](https://www.npmjs.com/package/imports-detector)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub stars](https://img.shields.io/github/stars/YOUR_USERNAME/imports-detector?style=social)](https://github.com/YOUR_USERNAME/imports-detector)
+[![GitHub stars](https://img.shields.io/github/stars/al-maqdi/imports-detector?style=social)](https://github.com/al-maqdi/imports-detector)
 
 A powerful package for detecting and analyzing imports in JavaScript/TypeScript applications. Find files importing specific modules, list all imports, and generate comprehensive dependency reports.
 
