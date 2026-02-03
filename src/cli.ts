@@ -28,6 +28,8 @@ function parseDetectorOptions(options: any): DetectorOptions {
     includeExtensions: options.include ? options.include.split(',') : undefined,
     excludePatterns: options.exclude ? options.exclude.split(',') : undefined,
     modulePath: options.modulePath,
+    baseUrl: options.baseUrl,
+    tsconfigPath: options.tsconfig,
   };
 }
 
@@ -43,6 +45,8 @@ program
   .option('-o, --output <file>', 'Output file path')
   .option('-f, --format <format>', 'Output format: json or text (default: text)')
   .option('--module-path <path>', 'Specific module path to match (e.g., ./admin/Dashboard)')
+  .option('--base-url <url>', 'Base URL for module resolution (overrides tsconfig)')
+  .option('--tsconfig <path>', 'Path to tsconfig.json for automatic baseUrl detection')
   .option('--include <patterns>', 'File extensions to include (comma-separated)')
   .option('--exclude <patterns>', 'Patterns to exclude (comma-separated)')
   .option('--no-static', 'Exclude static imports')
@@ -97,6 +101,8 @@ program
   .option('-p, --path <path>', 'Root directory to analyze')
   .option('-o, --output <file>', 'Output file path')
   .option('-f, --format <format>', 'Output format: json or text (default: text)')
+  .option('--base-url <url>', 'Base URL for module resolution (overrides tsconfig)')
+  .option('--tsconfig <path>', 'Path to tsconfig.json for automatic baseUrl detection')
   .option('--include <patterns>', 'File extensions to include (comma-separated)')
   .option('--exclude <patterns>', 'Patterns to exclude (comma-separated)')
   .option('--no-static', 'Exclude static imports')
@@ -151,6 +157,8 @@ program
   .option('-p, --path <path>', 'Root directory to analyze')
   .option('-o, --output <file>', 'Output file path (required)')
   .option('-f, --format <format>', 'Output format: json or text (default: text)')
+  .option('--base-url <url>', 'Base URL for module resolution (overrides tsconfig)')
+  .option('--tsconfig <path>', 'Path to tsconfig.json for automatic baseUrl detection')
   .option('--include <patterns>', 'File extensions to include (comma-separated)')
   .option('--exclude <patterns>', 'Patterns to exclude (comma-separated)')
   .option('--no-static', 'Exclude static imports')

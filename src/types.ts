@@ -95,6 +95,10 @@ export interface DetectorOptions {
   verbose?: boolean;
   /** Specific module path to match (for path-specific filtering) */
   modulePath?: string;
+  /** Base URL for module resolution (overrides tsconfig) */
+  baseUrl?: string;
+  /** Path to tsconfig.json for automatic baseUrl detection */
+  tsconfigPath?: string;
 }
 
 /**

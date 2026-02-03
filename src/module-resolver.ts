@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import { getTsconfig } from 'get-tsconfig';
 
 /**
  * Module Resolver
@@ -8,9 +9,50 @@ import fs from 'fs';
  */
 export class ModuleResolver {
   private extensions: string[];
+  private baseUrl?: string;
 
-  constructor(extensions: string[] = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']) {
-    this.extensions = extensions;
+  constructor(options?: {
+    extensions?: string[];
+    baseUrl?: string;  // Manual override
+    tsconfigPath?: string;  // Specific tsconfig to use
+    searchPath?: string;  // Auto-detect from this path
+  }) {
+    this.extensions = options?.extensions || ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
+
+    // Load baseUrl from options or tsconfig
+    if (options?.baseUrl) {
+      // Manual override takes precedence
+      this.baseUrl = path.resolve(options.baseUrl);
+    } else if (options?.searchPath || options?.tsconfigPath) {
+      // Try to read from tsconfig.json
+      this.loadBaseUrlFromTSConfig(options.tsconfigPath, options.searchPath);
+    }
+  }
+
+  /**
+   * Load baseUrl from tsconfig.json
+   */
+  private loadBaseUrlFromTSConfig(tsconfigPath?: string, searchPath?: string) {
+    try {
+      const result = tsconfigPath
+        ? getTsconfig(tsconfigPath)
+        : searchPath
+        ? getTsconfig(searchPath)
+        : null;
+
+      if (result && result.config.compilerOptions?.baseUrl) {
+        const configDir = path.dirname(result.path);
+        this.baseUrl = path.resolve(configDir, result.config.compilerOptions.baseUrl);
+
+        if (this.baseUrl) {
+          // Log that we found and are using baseUrl
+          console.warn(`Using baseUrl from tsconfig: ${this.baseUrl}`);
+        }
+      }
+    } catch (error) {
+      // Silently fall back if config reading fails
+      // This allows the tool to work even without tsconfig.json
+    }
   }
 
   /**
@@ -24,26 +66,66 @@ export class ModuleResolver {
       // Normalize the specifier
       const normalized = this.normalizePath(specifier);
 
-      // Handle relative imports
+      // 1. Handle relative imports (priority)
       if (normalized.startsWith('./') || normalized.startsWith('../')) {
         return this.resolveRelative(normalized, fromFile);
       }
 
-      // Handle absolute imports (src/components/Test)
+      // 2. Handle absolute imports (src/components/Test)
       if (path.isAbsolute(normalized)) {
         return this.resolveAbsolute(normalized);
       }
 
-      // Handle bare imports (react, lodash) - return as-is
+      // 3. Handle bare imports (react, lodash) - return as-is
       if (!normalized.includes('/') && !normalized.startsWith('.')) {
         return normalized;
       }
 
-      // Try to resolve relative to current file as fallback
+      // 4. Handle baseUrl imports (NEW!)
+      if (this.baseUrl && this.shouldUseBaseUrlResolution(normalized)) {
+        const baseUrlResolved = this.resolveWithBaseUrl(normalized);
+        if (baseUrlResolved) {
+          return baseUrlResolved;
+        }
+      }
+
+      // 5. Fallback: Try relative resolution
       return this.resolveRelative(normalized, fromFile);
     } catch (error) {
       return null;
     }
+  }
+
+  /**
+   * Determine if an import should use baseUrl resolution
+   */
+  private shouldUseBaseUrlResolution(specifier: string): boolean {
+    // Use baseUrl for non-relative, non-bare imports
+    const isRelative = specifier.startsWith('./') || specifier.startsWith('../');
+    const isBare = !specifier.includes('/');
+    const isNodeModule = specifier.includes('node_modules');
+
+    return !isRelative && !isBare && !isNodeModule;
+  }
+
+  /**
+   * Resolve import using baseUrl
+   */
+  private resolveWithBaseUrl(specifier: string): string | null {
+    if (!this.baseUrl) return null;
+
+    // Try baseUrl + specifier
+    const resolvedPath = path.resolve(this.baseUrl, specifier);
+
+    // Try extensions
+    const withExtension = this.tryExtensions(resolvedPath);
+    if (withExtension) return withExtension;
+
+    // Try index
+    const withIndex = this.tryIndex(resolvedPath);
+    if (withIndex) return withIndex;
+
+    return null;
   }
 
   /**

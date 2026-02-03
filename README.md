@@ -277,6 +277,8 @@ Global options:
 
 - `--path <path>` - Root directory to analyze
 - `--module-path <path>` - Specific module path to match (e.g., `admin/Dashboard`)
+- `--base-url <url>` - Base URL for module resolution (overrides tsconfig)
+- `--tsconfig <path>` - Path to tsconfig.json for automatic baseUrl detection
 - `--include <patterns>` - File extensions to include (comma-separated)
 - `--exclude <patterns>` - Patterns to exclude (comma-separated)
 - `--format <format>` - Output format: json or text (default: text)
@@ -296,8 +298,67 @@ imports-detector find React --path ./src
 # Find files importing Dashboard from admin folder only
 imports-detector find Dashboard --module-path admin/Dashboard --path ./src
 
+# Find files using TypeScript baseUrl (auto-detected from tsconfig.json)
+imports-detector find ImportBulkSchedulers --path ./src
+
+# Manually specify baseUrl if tsconfig is not available
+imports-detector find Button --base-url ./src --path ./src
+
 # Export results to JSON
 imports-detector find React --path ./src --include "**/*.tsx" --format json --output results.json
+```
+
+## TypeScript baseUrl Support
+
+The tool automatically detects and uses the `baseUrl` configuration from your `tsconfig.json` to resolve absolute imports.
+
+### How It Works
+
+If your `tsconfig.json` contains:
+```json
+{
+  "compilerOptions": {
+    "baseUrl": "./src"
+  }
+}
+```
+
+The tool will automatically resolve imports like:
+```typescript
+import { Button } from 'components/Button';
+import { Utils } from 'utils/helpers';
+```
+
+### Manual Configuration
+
+If your project doesn't have a `tsconfig.json` or you want to override the detected baseUrl:
+
+```bash
+# Specify baseUrl manually
+imports-detector find Button --base-url ./src ./src
+
+# Specify a custom tsconfig path
+imports-detector find Button --tsconfig ./configs/tsconfig.base.json ./src
+```
+
+### Supported Import Styles
+
+✅ **Relative imports** (always supported):
+```typescript
+import { X } from './components/X'
+import { Y } from '../utils/Y'
+```
+
+✅ **Absolute imports with baseUrl** (auto-detected):
+```typescript
+import { X } from 'components/X'
+import { Y } from 'utils/Y'
+```
+
+✅ **Bare modules** (always supported):
+```typescript
+import React from 'react'
+import _ from 'lodash'
 ```
 
 ## Library API
@@ -332,6 +393,8 @@ const analyzer = new ImportAnalyzer({
   excludePatterns: ['**/node_modules/**'],
   verbose: true,
   modulePath: 'admin/Dashboard', // Optional: filter by specific path
+  baseUrl: './src', // Optional: specify baseUrl manually
+  tsconfigPath: './tsconfig.json', // Optional: path to tsconfig for baseUrl detection
 });
 
 // Find files importing a specific module
@@ -426,6 +489,8 @@ interface DetectorOptions {
   detectRequire?: boolean; // Detect require calls (default: true)
   verbose?: boolean; // Enable verbose logging
   modulePath?: string; // Specific module path to match (for path-specific filtering)
+  baseUrl?: string; // Base URL for module resolution (overrides tsconfig)
+  tsconfigPath?: string; // Path to tsconfig.json for automatic baseUrl detection
 }
 ```
 

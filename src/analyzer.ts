@@ -31,6 +31,8 @@ export class ImportAnalyzer {
       detectRequire: options.detectRequire !== false,
       verbose: options.verbose || false,
       modulePath: options.modulePath,
+      baseUrl: options.baseUrl,
+      tsconfigPath: options.tsconfigPath,
     };
 
     this.fileDiscovery = new FileDiscovery({
@@ -42,7 +44,22 @@ export class ImportAnalyzer {
 
     this.parser = new CodeParser();
     this.extractor = new ImportExtractor();
-    this.resolver = new ModuleResolver(options.includeExtensions);
+    // Create a default resolver - will be recreated with searchPath in findFilesImporting
+    this.resolver = new ModuleResolver({
+      extensions: options.includeExtensions,
+    });
+  }
+
+  /**
+   * Create a resolver with searchPath for baseUrl auto-detection
+   */
+  private createResolver(searchPath: string): ModuleResolver {
+    return new ModuleResolver({
+      extensions: this.options.includeExtensions,
+      baseUrl: this.options.baseUrl,
+      tsconfigPath: this.options.tsconfigPath,
+      searchPath: searchPath,  // Auto-detect tsconfig from this path
+    });
   }
 
   /**
@@ -56,6 +73,9 @@ export class ImportAnalyzer {
   ): Promise<ImporterResult[]> {
     const results: ImporterResult[] = [];
 
+    // Create resolver with searchPath for baseUrl auto-detection
+    const resolver = this.createResolver(searchPath);
+
     try {
       const files = await this.fileDiscovery.findFiles(searchPath);
 
@@ -64,7 +84,7 @@ export class ImportAnalyzer {
       }
 
       // Resolve the target module path if provided
-      const targetPath = this.resolveTargetPath(searchPath, moduleName);
+      const targetPath = this.resolveTargetPath(searchPath, moduleName, resolver);
 
       for (const filePath of files) {
         try {
@@ -76,7 +96,8 @@ export class ImportAnalyzer {
             allImports,
             moduleName,
             filePath,
-            targetPath
+            targetPath,
+            resolver
           );
 
           if (matchingImports.length > 0) {
@@ -102,13 +123,13 @@ export class ImportAnalyzer {
    * Resolve the target path for module matching
    * If modulePath is specified, resolve it to an absolute path
    */
-  private resolveTargetPath(searchPath: string, moduleName: string): string | null {
+  private resolveTargetPath(searchPath: string, moduleName: string, resolver: ModuleResolver): string | null {
     if (!this.options.modulePath) {
       return null;
     }
 
     // Resolve the module path relative to search path
-    const resolved = this.resolver.resolveImport(
+    const resolved = resolver.resolveImport(
       this.options.modulePath,
       searchPath + '/dummy.ts' // Dummy file for relative resolution
     );
@@ -195,16 +216,18 @@ export class ImportAnalyzer {
    * @param moduleName - Name of the module to match
    * @param filePath - Path of the file containing the imports
    * @param targetPath - Optional resolved target path for path-specific matching
+   * @param resolver - Module resolver instance
    */
   private filterImportsByModule(
     imports: Import[],
     moduleName: string,
     filePath: string,
-    targetPath: string | null
+    targetPath: string | null,
+    resolver: ModuleResolver
   ): Import[] {
     return imports.filter((imp) => {
       // Resolve the import to an absolute path
-      const resolved = this.resolver.resolveImport(imp.module, filePath);
+      const resolved = resolver.resolveImport(imp.module, filePath);
 
       if (!resolved) {
         return false;
@@ -215,7 +238,7 @@ export class ImportAnalyzer {
 
       // If targetPath is provided, use exact path matching
       if (targetPath) {
-        return this.resolver.pathsMatch(resolved, targetPath);
+        return resolver.pathsMatch(resolved, targetPath);
       }
 
       // Otherwise, match by module name (backward compatibility)
