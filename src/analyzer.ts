@@ -2,6 +2,7 @@ import path from 'path';
 import { FileDiscovery } from './file-discovery.js';
 import { CodeParser } from './parser.js';
 import { ImportExtractor } from './extractor.js';
+import { ModuleResolver } from './module-resolver.js';
 import type {
   DetectorOptions,
   FileImports,
@@ -13,11 +14,13 @@ import type {
 /**
  * Main Analyzer Class
  * Orchestrates file discovery, parsing, and import extraction
+ * Uses module resolution to match imports like IDEs do
  */
 export class ImportAnalyzer {
   private fileDiscovery: FileDiscovery;
   private parser: CodeParser;
   private extractor: ImportExtractor;
+  private resolver: ModuleResolver;
   private options: DetectorOptions;
 
   constructor(options: DetectorOptions = {}) {
@@ -39,6 +42,7 @@ export class ImportAnalyzer {
 
     this.parser = new CodeParser();
     this.extractor = new ImportExtractor();
+    this.resolver = new ModuleResolver(options.includeExtensions);
   }
 
   /**
@@ -59,13 +63,21 @@ export class ImportAnalyzer {
         console.log(`Found ${files.length} files to analyze`);
       }
 
+      // Resolve the target module path if provided
+      const targetPath = this.resolveTargetPath(searchPath, moduleName);
+
       for (const filePath of files) {
         try {
           const ast = this.parser.parseFile(filePath);
           const allImports = this.extractor.getAllImports(ast);
 
-          // Filter imports that match the module name
-          const matchingImports = this.filterImportsByModule(allImports, moduleName);
+          // Resolve imports and filter by module name
+          const matchingImports = this.filterImportsByModule(
+            allImports,
+            moduleName,
+            filePath,
+            targetPath
+          );
 
           if (matchingImports.length > 0) {
             results.push({
@@ -84,6 +96,24 @@ export class ImportAnalyzer {
     } catch (error) {
       throw new Error(`Failed to find files importing "${moduleName}": ${error}`);
     }
+  }
+
+  /**
+   * Resolve the target path for module matching
+   * If modulePath is specified, resolve it to an absolute path
+   */
+  private resolveTargetPath(searchPath: string, moduleName: string): string | null {
+    if (!this.options.modulePath) {
+      return null;
+    }
+
+    // Resolve the module path relative to search path
+    const resolved = this.resolver.resolveImport(
+      this.options.modulePath,
+      searchPath + '/dummy.ts' // Dummy file for relative resolution
+    );
+
+    return resolved;
   }
 
   /**
@@ -159,17 +189,36 @@ export class ImportAnalyzer {
   }
 
   /**
-   * Filter imports by module name
-   * Handles both named imports and file paths
-   * If modulePath is specified in options, also filters by import path
+   * Filter imports by module name using proper module resolution
+   * This mimics how IDEs resolve imports (like "command + click")
+   * @param imports - All imports from a file
+   * @param moduleName - Name of the module to match
+   * @param filePath - Path of the file containing the imports
+   * @param targetPath - Optional resolved target path for path-specific matching
    */
-  private filterImportsByModule(imports: Import[], moduleName: string): Import[] {
+  private filterImportsByModule(
+    imports: Import[],
+    moduleName: string,
+    filePath: string,
+    targetPath: string | null
+  ): Import[] {
     return imports.filter((imp) => {
-      // If modulePath is specified, check if the import module matches the path
-      if (this.options.modulePath) {
-        return this.doesImportMatchPath(imp.module, this.options.modulePath, moduleName);
+      // Resolve the import to an absolute path
+      const resolved = this.resolver.resolveImport(imp.module, filePath);
+
+      if (!resolved) {
+        return false;
       }
 
+      // Store the resolved path for reference
+      imp.resolvedPath = resolved;
+
+      // If targetPath is provided, use exact path matching
+      if (targetPath) {
+        return this.resolver.pathsMatch(resolved, targetPath);
+      }
+
+      // Otherwise, match by module name (backward compatibility)
       // Check if module name matches exactly
       if (imp.module === moduleName) {
         return true;
@@ -177,6 +226,12 @@ export class ImportAnalyzer {
 
       // Check if the module is imported as a named specifier
       if (imp.specifiers && imp.specifiers.includes(moduleName)) {
+        return true;
+      }
+
+      // Check if resolved path basename matches module name
+      const resolvedBasename = path.basename(resolved).replace(/\.(js|jsx|ts|tsx)$/, '');
+      if (resolvedBasename === moduleName) {
         return true;
       }
 
@@ -189,92 +244,5 @@ export class ImportAnalyzer {
 
       return false;
     });
-  }
-
-  /**
-   * Check if an import module matches a specific path
-   * Uses strict path-ending matching for accuracy
-   */
-  private doesImportMatchPath(importModule: string, targetPath: string, moduleName: string): boolean {
-    // Normalize paths for comparison
-    const normalizedImport = this.normalizeModulePath(importModule);
-    const normalizedTarget = this.normalizeModulePath(targetPath);
-
-    // Check if paths match (handle various path formats)
-    const importPath = normalizedImport.toLowerCase();
-    const targetPathLower = normalizedTarget.toLowerCase();
-
-    // Direct match
-    if (importPath === targetPathLower) {
-      return true;
-    }
-
-    // Match if import path ENDS WITH target path (most important check)
-    // This handles relative imports correctly
-    // Example: "scheduler/bulkimportform" ends with "components/authorised/scheduler/bulkimportform"
-    if (targetPathLower.endsWith(importPath)) {
-      // Verify substantial match: at least filename and one folder
-      const importSegments = importPath.split('/').filter(s => s);
-      const targetSegments = targetPathLower.split('/').filter(s => s);
-
-      // Require import to have at least 2 segments (folder/file or more)
-      if (importSegments.length >= 2) {
-        return true;
-      }
-    }
-
-    // Match if target path ENDS WITH import path (reverse scenario)
-    // Example: "./bulkimportform" ends with "scheduler/bulkimportform"
-    if (importPath.endsWith(targetPathLower)) {
-      const importSegments = importPath.split('/').filter(s => s);
-      const targetSegments = targetPathLower.split('/').filter(s => s);
-
-      // Require target to have at least 2 segments
-      if (targetSegments.length >= 2) {
-        return true;
-      }
-    }
-
-    // Check for overlapping suffix (significant path portion matches)
-    // Match if the last 2-3 segments match (folder structure + filename)
-    const importSegments = importPath.split('/').filter(s => s);
-    const targetSegments = targetPathLower.split('/').filter(s => s);
-
-    if (importSegments.length >= 2 && targetSegments.length >= 2) {
-      let matchCount = 0;
-      const minLen = Math.min(importSegments.length, targetSegments.length);
-
-      // Match from the end (where the file would be)
-      for (let i = 1; i <= minLen; i++) {
-        const impSeg = importSegments[importSegments.length - i];
-        const tgtSeg = targetSegments[targetSegments.length - i];
-
-        if (impSeg === tgtSeg) {
-          matchCount++;
-        } else {
-          break;
-        }
-      }
-
-      // Require at least 2 matching segments (folder + filename minimum)
-      // AND ensure we're matching a substantial portion (at least 40% of segments)
-      const matchRatio = matchCount / Math.min(importSegments.length, targetSegments.length);
-      if (matchCount >= 2 && matchRatio >= 0.4) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Normalize module path for comparison
-   * Removes file extensions, leading ./ or ../, and normalizes separators
-   */
-  private normalizeModulePath(modulePath: string): string {
-    return modulePath
-      .replace(/^\.+\//g, '') // Remove leading ./, ../, etc.
-      .replace(/\.(js|jsx|ts|tsx|json)$/, '') // Remove file extensions
-      .replace(/\\/g, '/'); // Normalize path separators
   }
 }

@@ -26,6 +26,8 @@ export interface Import {
   kind?: 'named' | 'default' | 'namespace';
   /** Raw import statement for display */
   raw?: string;
+  /** Resolved absolute path (computed during analysis) */
+  resolvedPath?: string;
 }
 
 /**
