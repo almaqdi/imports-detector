@@ -24,14 +24,11 @@
     "import-detection",
     "code-visualization"
   ],
-  "author": "",
+  "author": "al-maqdi",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/almaqdi/imports-detector.git"
-  },
+  "repository": "github:al-maqdi/imports-detector",
   "bugs": {
-    "url": "https://github.com/almaqdi/imports-detector/issues"
+    "url": "https://github.com/al-maqdi/imports-detector/issues"
   },
   "homepage": "https://github.com/al-maqdi/imports-detector#readme",
   "dependencies": {
