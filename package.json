@@ -1,6 +1,6 @@
 {
   "name": "imports-detector",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Detect and analyze imports in JavaScript/TypeScript applications. Find files importing specific modules, list all imports, and generate dependency reports.",
   "main": "dist/index.js",
   "bin": {
