@@ -1,0 +1,58 @@
+{
+  "name": "imports-detector",
+  "version": "0.1.0",
+  "description": "Detect and analyze imports in JavaScript/TypeScript applications. Find files importing specific modules, list all imports, and generate dependency reports.",
+  "main": "dist/index.js",
+  "bin": {
+    "imports-detector": "./bin/cli.js"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "cli": "node bin/cli.js",
+    "prepublishOnly": "npm run build",
+    "test": "echo \"Tests not yet implemented\""
+  },
+  "keywords": [
+    "imports",
+    "dependencies",
+    "ast",
+    "static-analysis",
+    "code-analysis",
+    "dependency-graph",
+    "import-detection",
+    "code-visualization"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "bugs": {
+    "url": ""
+  },
+  "homepage": "",
+  "dependencies": {
+    "@babel/parser": "^7.25.4",
+    "@babel/traverse": "^7.25.4",
+    "@babel/types": "^7.25.4",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "fast-glob": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/babel__traverse": "^7.28.0",
+    "@types/node": "^22.5.5",
+    "typescript": "^5.6.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md"
+  ]
+}
