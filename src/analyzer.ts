@@ -193,7 +193,7 @@ export class ImportAnalyzer {
 
   /**
    * Check if an import module matches a specific path
-   * Supports both relative and absolute path matching
+   * Uses strict path-ending matching for accuracy
    */
   private doesImportMatchPath(importModule: string, targetPath: string, moduleName: string): boolean {
     // Normalize paths for comparison
@@ -209,52 +209,59 @@ export class ImportAnalyzer {
       return true;
     }
 
-    // Check if the target path is contained in the import path (full path match)
-    // This handles cases like:
-    // - "src/admin/dashboard" matches "components/src/admin/dashboard"
-    // But NOT: "components" matches "src/admin/dashboard/components"
-    if (importPath.includes(targetPathLower)) {
-      // Additional validation: must be a substantial match (at least 2 segments)
-      const targetSegments = targetPathLower.split('/').filter(s => s);
-      if (targetSegments.length >= 2) {
-        return true;
-      }
-    }
-
-    // Check if the import path is contained in the target path
-    // This handles cases like:
-    // - "../admin/dashboard" matches "admin/dashboard" (after normalization)
-    // But it must be a significant portion of the path
-    if (targetPathLower.includes(importPath)) {
-      // Only match if import path is substantial (at least 2 segments)
+    // Match if import path ENDS WITH target path (most important check)
+    // This handles relative imports correctly
+    // Example: "scheduler/bulkimportform" ends with "components/authorised/scheduler/bulkimportform"
+    if (targetPathLower.endsWith(importPath)) {
+      // Verify substantial match: at least filename and one folder
       const importSegments = importPath.split('/').filter(s => s);
+      const targetSegments = targetPathLower.split('/').filter(s => s);
+
+      // Require import to have at least 2 segments (folder/file or more)
       if (importSegments.length >= 2) {
         return true;
       }
     }
 
-    // Check if path segments match from the end (filename matching)
+    // Match if target path ENDS WITH import path (reverse scenario)
+    // Example: "./bulkimportform" ends with "scheduler/bulkimportform"
+    if (importPath.endsWith(targetPathLower)) {
+      const importSegments = importPath.split('/').filter(s => s);
+      const targetSegments = targetPathLower.split('/').filter(s => s);
+
+      // Require target to have at least 2 segments
+      if (targetSegments.length >= 2) {
+        return true;
+      }
+    }
+
+    // Check for overlapping suffix (significant path portion matches)
+    // Match if the last 2-3 segments match (folder structure + filename)
     const importSegments = importPath.split('/').filter(s => s);
     const targetSegments = targetPathLower.split('/').filter(s => s);
 
-    // Match if the last 2+ segments match
     if (importSegments.length >= 2 && targetSegments.length >= 2) {
       let matchCount = 0;
       const minLen = Math.min(importSegments.length, targetSegments.length);
 
+      // Match from the end (where the file would be)
       for (let i = 1; i <= minLen; i++) {
-        const importSegment = importSegments[importSegments.length - i];
-        const targetSegment = targetSegments[targetSegments.length - i];
+        const impSeg = importSegments[importSegments.length - i];
+        const tgtSeg = targetSegments[targetSegments.length - i];
 
-        if (importSegment === targetSegment) {
+        if (impSeg === tgtSeg) {
           matchCount++;
         } else {
           break;
         }
       }
 
-      // Require at least 2 matching segments (folder + filename)
-      return matchCount >= 2;
+      // Require at least 2 matching segments (folder + filename minimum)
+      // AND ensure we're matching a substantial portion (at least 40% of segments)
+      const matchRatio = matchCount / Math.min(importSegments.length, targetSegments.length);
+      if (matchCount >= 2 && matchRatio >= 0.4) {
+        return true;
+      }
     }
 
     return false;
