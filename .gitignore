@@ -12,6 +12,7 @@ build/
 # Testing
 coverage/
 .nyc_output/
+tests/
 
 # Environment files
 .env
