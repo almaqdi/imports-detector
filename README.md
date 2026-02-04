@@ -2,6 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/imports-detector)](https://www.npmjs.com/package/imports-detector)
 [![npm dm](https://img.shields.io/npm/dm/imports-detector)](https://www.npmjs.com/package/imports-detector)
+[![npm dw](https://img.shields.io/npm/dw/imports-detector)](https://www.npmjs.com/package/imports-detector)
 [![npm](https://img.shields.io/npm/l/imports-detector)](https://www.npmjs.com/package/imports-detector)
 [![GitHub stars](https://img.shields.io/github/stars/al-maqdi/imports-detector?style=social)](https://github.com/almaqdi/imports-detector)
 

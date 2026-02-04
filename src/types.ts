@@ -112,3 +112,10 @@ export interface OutputOptions {
   includeStats?: boolean;
   includeLocations?: boolean;
 }
+
+/**
+ * Progress callback for reporting analysis progress
+ */
+export interface ProgressCallback {
+  (current: number, total: number, message?: string): void;
+}

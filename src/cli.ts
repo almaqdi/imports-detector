@@ -7,6 +7,7 @@ import { TextGenerator } from './output/text-generator.js';
 import type { DetectorOptions } from './types.js';
 import fs from 'fs';
 import path from 'path';
+import ora from 'ora';
 
 const program = new Command();
 
@@ -60,12 +61,23 @@ program
       const detectorOptions = parseDetectorOptions(options);
       const format = options.format || 'text';
 
-      if (detectorOptions.verbose) {
-        console.error(`Searching for "${moduleName}" in ${searchPath}...`);
-      }
+      // Determine if we should show spinner (not for JSON output or file output)
+      const shouldShowSpinner = format !== 'json' && !options.output && !detectorOptions.verbose;
+
+      const spinner = shouldShowSpinner ? ora('Searching for files...').start() : null;
 
       const analyzer = new ImportAnalyzer(detectorOptions);
-      const results = await analyzer.findFilesImporting(moduleName, searchPath);
+
+      // Create progress callback
+      const progressCallback = shouldShowSpinner && spinner ? (current: number, total: number) => {
+        spinner.text = `Analyzing files... (${current}/${total})`;
+      } : undefined;
+
+      const results = await analyzer.findFilesImporting(moduleName, searchPath, progressCallback);
+
+      if (spinner) {
+        spinner.succeed(`Found ${results.length} file${results.length !== 1 ? 's' : ''} importing "${moduleName}"`);
+      }
 
       let output: string;
 
@@ -116,12 +128,23 @@ program
       const detectorOptions = parseDetectorOptions(options);
       const format = options.format || 'text';
 
-      if (detectorOptions.verbose) {
-        console.error(`Analyzing imports in ${searchPath}...`);
-      }
+      // Determine if we should show spinner (not for JSON output or file output)
+      const shouldShowSpinner = format !== 'json' && !options.output && !detectorOptions.verbose;
+
+      const spinner = shouldShowSpinner ? ora('Scanning files...').start() : null;
 
       const analyzer = new ImportAnalyzer(detectorOptions);
-      const analysis = await analyzer.analyzeProject(searchPath);
+
+      // Create progress callback
+      const progressCallback = shouldShowSpinner && spinner ? (current: number, total: number) => {
+        spinner.text = `Analyzing files... (${current}/${total})`;
+      } : undefined;
+
+      const analysis = await analyzer.analyzeProject(searchPath, progressCallback);
+
+      if (spinner) {
+        spinner.succeed(`Analyzed ${analysis.totalFiles} file${analysis.totalFiles !== 1 ? 's' : ''}, found ${analysis.totalImports} import${analysis.totalImports !== 1 ? 's' : ''}`);
+      }
 
       let output: string;
 
@@ -177,12 +200,23 @@ program
         process.exit(1);
       }
 
-      if (detectorOptions.verbose) {
-        console.error(`Generating report for ${searchPath}...`);
-      }
+      // Determine if we should show spinner (not in verbose mode)
+      const shouldShowSpinner = !detectorOptions.verbose;
+
+      const spinner = shouldShowSpinner ? ora('Scanning files...').start() : null;
 
       const analyzer = new ImportAnalyzer(detectorOptions);
-      const analysis = await analyzer.analyzeProject(searchPath);
+
+      // Create progress callback
+      const progressCallback = shouldShowSpinner && spinner ? (current: number, total: number) => {
+        spinner.text = `Analyzing files... (${current}/${total})`;
+      } : undefined;
+
+      const analysis = await analyzer.analyzeProject(searchPath, progressCallback);
+
+      if (spinner) {
+        spinner.succeed(`Analyzed ${analysis.totalFiles} file${analysis.totalFiles !== 1 ? 's' : ''}`);
+      }
 
       let output: string;
 

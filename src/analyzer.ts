@@ -9,6 +9,7 @@ import type {
   ImporterResult,
   ProjectAnalysis,
   Import,
+  ProgressCallback,
 } from './types.js';
 
 /**
@@ -66,10 +67,12 @@ export class ImportAnalyzer {
    * Find all files that import a specific module
    * @param moduleName - Name of the module to search for (e.g., 'Test', 'react')
    * @param searchPath - Root directory to search
+   * @param progressCallback - Optional callback for progress updates
    */
   async findFilesImporting(
     moduleName: string,
-    searchPath: string
+    searchPath: string,
+    progressCallback?: ProgressCallback
   ): Promise<ImporterResult[]> {
     const results: ImporterResult[] = [];
 
@@ -86,7 +89,14 @@ export class ImportAnalyzer {
       // Resolve the target module path if provided
       const targetPath = this.resolveTargetPath(searchPath, moduleName, resolver);
 
-      for (const filePath of files) {
+      for (let i = 0; i < files.length; i++) {
+        const filePath = files[i];
+
+        // Report progress
+        if (progressCallback) {
+          progressCallback(i + 1, files.length);
+        }
+
         try {
           const ast = this.parser.parseFile(filePath);
           const allImports = this.extractor.getAllImports(ast);
@@ -140,8 +150,12 @@ export class ImportAnalyzer {
   /**
    * Analyze all imports in a project
    * @param searchPath - Root directory to analyze
+   * @param progressCallback - Optional callback for progress updates
    */
-  async analyzeProject(searchPath: string): Promise<ProjectAnalysis> {
+  async analyzeProject(
+    searchPath: string,
+    progressCallback?: ProgressCallback
+  ): Promise<ProjectAnalysis> {
     try {
       const files = await this.fileDiscovery.findFiles(searchPath);
       const filesMap: Record<string, FileImports> = {};
@@ -151,7 +165,14 @@ export class ImportAnalyzer {
       let totalLazy = 0;
       let totalRequire = 0;
 
-      for (const filePath of files) {
+      for (let i = 0; i < files.length; i++) {
+        const filePath = files[i];
+
+        // Report progress
+        if (progressCallback) {
+          progressCallback(i + 1, files.length);
+        }
+
         try {
           const ast = this.parser.parseFile(filePath);
           const fileImports = this.extractor.extractAll(ast, {
