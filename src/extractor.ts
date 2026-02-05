@@ -2,7 +2,7 @@ import * as babelTraverse from '@babel/traverse';
 import type { NodePath } from '@babel/traverse';
 import * as t from '@babel/types';
 import type { File } from '@babel/types';
-import { Import, ImportType, FileImports } from './types.js';
+import { Import, ImportType, FileImports, Export } from './types.js';
 
 // @babel/traverse has nested default exports in ESM
 const traverse = (babelTraverse as any).default?.default || (babelTraverse as any).default || babelTraverse;
@@ -287,5 +287,123 @@ export class ImportExtractor {
       ...fileImports.lazy,
       ...fileImports.require,
     ];
+  }
+
+  /**
+   * Extract all exports from a file
+   * Returns information about what the file exports (for barrel file detection)
+   */
+  extractExports(ast: File): Export[] {
+    const exports: Export[] = [];
+
+    traverse(ast, {
+      // Handle named exports: export { name1, name2 }
+      ExportNamedDeclaration(path: NodePath<t.ExportNamedDeclaration>) {
+        const node = path.node;
+
+        // export { foo, bar } from './module'
+        if (node.source) {
+          // Re-export from another module
+          if (node.specifiers) {
+            for (const spec of node.specifiers) {
+              if (t.isExportSpecifier(spec)) {
+                const exportedName = t.isIdentifier(spec.exported)
+                  ? spec.exported.name
+                  : spec.exported.value;
+                const localName = spec.local.name;
+
+                exports.push({
+                  name: exportedName,
+                  localName,
+                  kind: 'named',
+                });
+              }
+            }
+          }
+        } else {
+          // export { foo, bar } (local exports)
+          if (node.specifiers) {
+            for (const spec of node.specifiers) {
+              if (t.isExportSpecifier(spec)) {
+                const exportedName = t.isIdentifier(spec.exported)
+                  ? spec.exported.name
+                  : spec.exported.value;
+                const localName = spec.local.name;
+
+                exports.push({
+                  name: exportedName,
+                  localName,
+                  kind: 'named',
+                });
+              }
+            }
+          }
+        }
+      },
+
+      // Handle export declarations
+      ExportDeclaration(path: NodePath<any>) {
+        const node = path.node;
+
+        // export const foo = ...
+        if (t.isVariableDeclaration(node.declaration)) {
+          for (const declarator of node.declaration.declarations) {
+            if (t.isIdentifier(declarator.id)) {
+              exports.push({
+                name: declarator.id.name,
+                localName: declarator.id.name,
+                kind: 'named',
+              });
+            }
+          }
+        }
+
+        // export function foo() {}
+        if (t.isFunctionDeclaration(node.declaration) && node.declaration.id) {
+          exports.push({
+            name: node.declaration.id.name,
+            localName: node.declaration.id.name,
+            kind: 'named',
+          });
+        }
+
+        // export class Foo {}
+        if (t.isClassDeclaration(node.declaration) && node.declaration.id) {
+          exports.push({
+            name: node.declaration.id.name,
+            localName: node.declaration.id.name,
+            kind: 'named',
+          });
+        }
+      },
+
+      // Handle default exports
+      ExportDefaultDeclaration(path: NodePath<t.ExportDefaultDeclaration>) {
+        const node = path.node;
+
+        let localName = 'default';
+
+        // export default foo
+        if (t.isIdentifier(node.declaration)) {
+          localName = node.declaration.name;
+        }
+        // export default function foo() {}
+        else if (t.isFunctionDeclaration(node.declaration) && node.declaration.id) {
+          localName = node.declaration.id.name;
+        }
+        // export default class Foo {}
+        else if (t.isClassDeclaration(node.declaration) && node.declaration.id) {
+          localName = node.declaration.id.name;
+        }
+
+        exports.push({
+          name: 'default',
+          localName,
+          kind: 'default',
+        });
+      },
+    });
+
+    return exports;
   }
 }

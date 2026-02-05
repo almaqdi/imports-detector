@@ -119,3 +119,15 @@ export interface OutputOptions {
 export interface ProgressCallback {
   (current: number, total: number, message?: string): void;
 }
+
+/**
+ * Represents an export from a file
+ */
+export interface Export {
+  /** Exported name */
+  name: string;
+  /** Local name in the file (for re-exports) */
+  localName: string;
+  /** Export kind: 'named' or 'default' */
+  kind: 'named' | 'default';
+}
