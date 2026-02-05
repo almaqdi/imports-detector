@@ -1,6 +1,6 @@
 {
   "name": "imports-detector",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Detect and analyze imports in JavaScript/TypeScript applications. Find files importing specific modules, list all imports, and generate dependency reports.",
   "main": "dist/index.js",
   "bin": {
@@ -26,11 +26,11 @@
   ],
   "author": "al-maqdi",
   "license": "MIT",
-  "repository": "github:al-maqdi/imports-detector",
+  "repository": "github:almaqdi/imports-detector",
   "bugs": {
-    "url": "https://github.com/al-maqdi/imports-detector/issues"
+    "url": "https://github.com/almaqdi/imports-detector/issues"
   },
-  "homepage": "https://github.com/al-maqdi/imports-detector#readme",
+  "homepage": "https://github.com/almaqdi/imports-detector#readme",
   "dependencies": {
     "@babel/parser": "^7.25.4",
     "@babel/traverse": "^7.25.4",

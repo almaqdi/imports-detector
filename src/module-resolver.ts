@@ -63,12 +63,15 @@ export class ModuleResolver {
    */
   resolveImport(specifier: string, fromFile: string): string | null {
     try {
-      // Normalize the specifier
+      // Check if it's a relative import BEFORE normalizing
+      const isRelative = specifier.startsWith('./') || specifier.startsWith('../');
+
+      // Normalize the specifier (but keep relative info)
       const normalized = this.normalizePath(specifier);
 
       // 1. Handle relative imports (priority)
-      if (normalized.startsWith('./') || normalized.startsWith('../')) {
-        return this.resolveRelative(normalized, fromFile);
+      if (isRelative) {
+        return this.resolveRelative(specifier, fromFile);
       }
 
       // 2. Handle absolute imports (src/components/Test)
@@ -136,7 +139,8 @@ export class ModuleResolver {
     const fromDir = path.dirname(fromFile);
     const resolved = path.resolve(fromDir, specifier);
 
-    return this.tryExtensions(resolved) || this.tryIndex(resolved);
+    const result = this.tryExtensions(resolved) || this.tryIndex(resolved);
+    return result;
   }
 
   /**

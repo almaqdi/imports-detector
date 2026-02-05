@@ -13,8 +13,10 @@ const program = new Command();
 
 program
   .name('imports-detector')
-  .description('Detect and analyze imports in JavaScript/TypeScript applications')
-  .version('0.1.0');
+  .description(
+    'Detect and analyze imports in JavaScript/TypeScript applications',
+  )
+  .version('0.2.3');
 
 /**
  * Parse detector options from CLI flags
@@ -40,53 +42,99 @@ function parseDetectorOptions(options: any): DetectorOptions {
 program
   .command('find')
   .description('Find all files that import a specific module')
-  .argument('<module>', 'Name of the module to search for')
+  .argument(
+    '[module]',
+    'Name of the module to search for (optional when --module-path is used)',
+  )
   .argument('[paths...]', 'Paths to search (default: current directory)')
   .option('-p, --path <path>', 'Root directory to search')
   .option('-o, --output <file>', 'Output file path')
-  .option('-f, --format <format>', 'Output format: json or text (default: text)')
-  .option('--module-path <path>', 'Specific module path to match (e.g., ./admin/Dashboard)')
-  .option('--base-url <url>', 'Base URL for module resolution (overrides tsconfig)')
-  .option('--tsconfig <path>', 'Path to tsconfig.json for automatic baseUrl detection')
-  .option('--include <patterns>', 'File extensions to include (comma-separated)')
+  .option(
+    '-f, --format <format>',
+    'Output format: json or text (default: text)',
+  )
+  .option(
+    '--module-path <path>',
+    'Specific module path to match (e.g., ./admin/Dashboard.tsx). When used without module name, finds all imports from this file.',
+  )
+  .option(
+    '--base-url <url>',
+    'Base URL for module resolution (overrides tsconfig)',
+  )
+  .option(
+    '--tsconfig <path>',
+    'Path to tsconfig.json for automatic baseUrl detection',
+  )
+  .option(
+    '--include <patterns>',
+    'File extensions to include (comma-separated)',
+  )
   .option('--exclude <patterns>', 'Patterns to exclude (comma-separated)')
   .option('--no-static', 'Exclude static imports')
   .option('--no-dynamic', 'Exclude dynamic imports')
   .option('--no-lazy', 'Exclude lazy imports')
   .option('--no-require', 'Exclude require calls')
   .option('-v, --verbose', 'Verbose output')
-  .action(async (moduleName: string, paths: string[], options) => {
+  .action(async (moduleName: string | undefined, paths: string[], options) => {
     try {
+      // Validate that either moduleName or modulePath is provided
+      if (!moduleName && !options.modulePath) {
+        console.error(
+          'Error: Either <module> name or --module-path must be provided',
+        );
+        console.error('Example: imports-detector find React ./src');
+        console.error(
+          'Example: imports-detector find --module-path src/components/Header.tsx ./src',
+        );
+        process.exit(1);
+      }
+
       const searchPath = options.path || paths[0] || process.cwd();
       const detectorOptions = parseDetectorOptions(options);
       const format = options.format || 'text';
 
       // Determine if we should show spinner (not for JSON output or file output)
-      const shouldShowSpinner = format !== 'json' && !options.output && !detectorOptions.verbose;
+      const shouldShowSpinner =
+        format !== 'json' && !options.output && !detectorOptions.verbose;
 
-      const spinner = shouldShowSpinner ? ora('Searching for files...').start() : null;
+      const spinner = shouldShowSpinner
+        ? ora('Searching for files...').start()
+        : null;
 
       const analyzer = new ImportAnalyzer(detectorOptions);
 
       // Create progress callback
-      const progressCallback = shouldShowSpinner && spinner ? (current: number, total: number) => {
-        spinner.text = `Analyzing files... (${current}/${total})`;
-      } : undefined;
+      const progressCallback =
+        shouldShowSpinner && spinner
+          ? (current: number, total: number) => {
+              spinner.text = `Analyzing files... (${current}/${total})`;
+            }
+          : undefined;
 
-      const results = await analyzer.findFilesImporting(moduleName, searchPath, progressCallback);
+      const results = await analyzer.findFilesImporting(
+        moduleName || null,
+        searchPath,
+        progressCallback,
+      );
+
+      const displayModule = moduleName || options.modulePath || 'module';
 
       if (spinner) {
-        spinner.succeed(`Found ${results.length} file${results.length !== 1 ? 's' : ''} importing "${moduleName}"`);
+        spinner.succeed(
+          `Found ${results.length} file${
+            results.length !== 1 ? 's' : ''
+          } importing "${displayModule}"`,
+        );
       }
 
       let output: string;
 
       if (format === 'json') {
         const generator = new JSONGenerator();
-        output = generator.generateFromFindResults(results, moduleName);
+        output = generator.generateFromFindResults(results, displayModule);
       } else {
         const generator = new TextGenerator();
-        output = generator.generateFromFindResults(results, moduleName);
+        output = generator.generateFromFindResults(results, displayModule);
       }
 
       if (options.output) {
@@ -112,10 +160,22 @@ program
   .argument('[paths...]', 'Paths to analyze (default: current directory)')
   .option('-p, --path <path>', 'Root directory to analyze')
   .option('-o, --output <file>', 'Output file path')
-  .option('-f, --format <format>', 'Output format: json or text (default: text)')
-  .option('--base-url <url>', 'Base URL for module resolution (overrides tsconfig)')
-  .option('--tsconfig <path>', 'Path to tsconfig.json for automatic baseUrl detection')
-  .option('--include <patterns>', 'File extensions to include (comma-separated)')
+  .option(
+    '-f, --format <format>',
+    'Output format: json or text (default: text)',
+  )
+  .option(
+    '--base-url <url>',
+    'Base URL for module resolution (overrides tsconfig)',
+  )
+  .option(
+    '--tsconfig <path>',
+    'Path to tsconfig.json for automatic baseUrl detection',
+  )
+  .option(
+    '--include <patterns>',
+    'File extensions to include (comma-separated)',
+  )
   .option('--exclude <patterns>', 'Patterns to exclude (comma-separated)')
   .option('--no-static', 'Exclude static imports')
   .option('--no-dynamic', 'Exclude dynamic imports')
@@ -129,21 +189,36 @@ program
       const format = options.format || 'text';
 
       // Determine if we should show spinner (not for JSON output or file output)
-      const shouldShowSpinner = format !== 'json' && !options.output && !detectorOptions.verbose;
+      const shouldShowSpinner =
+        format !== 'json' && !options.output && !detectorOptions.verbose;
 
-      const spinner = shouldShowSpinner ? ora('Scanning files...').start() : null;
+      const spinner = shouldShowSpinner
+        ? ora('Scanning files...').start()
+        : null;
 
       const analyzer = new ImportAnalyzer(detectorOptions);
 
       // Create progress callback
-      const progressCallback = shouldShowSpinner && spinner ? (current: number, total: number) => {
-        spinner.text = `Analyzing files... (${current}/${total})`;
-      } : undefined;
+      const progressCallback =
+        shouldShowSpinner && spinner
+          ? (current: number, total: number) => {
+              spinner.text = `Analyzing files... (${current}/${total})`;
+            }
+          : undefined;
 
-      const analysis = await analyzer.analyzeProject(searchPath, progressCallback);
+      const analysis = await analyzer.analyzeProject(
+        searchPath,
+        progressCallback,
+      );
 
       if (spinner) {
-        spinner.succeed(`Analyzed ${analysis.totalFiles} file${analysis.totalFiles !== 1 ? 's' : ''}, found ${analysis.totalImports} import${analysis.totalImports !== 1 ? 's' : ''}`);
+        spinner.succeed(
+          `Analyzed ${analysis.totalFiles} file${
+            analysis.totalFiles !== 1 ? 's' : ''
+          }, found ${analysis.totalImports} import${
+            analysis.totalImports !== 1 ? 's' : ''
+          }`,
+        );
       }
 
       let output: string;
@@ -179,10 +254,22 @@ program
   .argument('[paths...]', 'Paths to analyze (default: current directory)')
   .option('-p, --path <path>', 'Root directory to analyze')
   .option('-o, --output <file>', 'Output file path (required)')
-  .option('-f, --format <format>', 'Output format: json or text (default: text)')
-  .option('--base-url <url>', 'Base URL for module resolution (overrides tsconfig)')
-  .option('--tsconfig <path>', 'Path to tsconfig.json for automatic baseUrl detection')
-  .option('--include <patterns>', 'File extensions to include (comma-separated)')
+  .option(
+    '-f, --format <format>',
+    'Output format: json or text (default: text)',
+  )
+  .option(
+    '--base-url <url>',
+    'Base URL for module resolution (overrides tsconfig)',
+  )
+  .option(
+    '--tsconfig <path>',
+    'Path to tsconfig.json for automatic baseUrl detection',
+  )
+  .option(
+    '--include <patterns>',
+    'File extensions to include (comma-separated)',
+  )
   .option('--exclude <patterns>', 'Patterns to exclude (comma-separated)')
   .option('--no-static', 'Exclude static imports')
   .option('--no-dynamic', 'Exclude dynamic imports')
@@ -203,19 +290,31 @@ program
       // Determine if we should show spinner (not in verbose mode)
       const shouldShowSpinner = !detectorOptions.verbose;
 
-      const spinner = shouldShowSpinner ? ora('Scanning files...').start() : null;
+      const spinner = shouldShowSpinner
+        ? ora('Scanning files...').start()
+        : null;
 
       const analyzer = new ImportAnalyzer(detectorOptions);
 
       // Create progress callback
-      const progressCallback = shouldShowSpinner && spinner ? (current: number, total: number) => {
-        spinner.text = `Analyzing files... (${current}/${total})`;
-      } : undefined;
+      const progressCallback =
+        shouldShowSpinner && spinner
+          ? (current: number, total: number) => {
+              spinner.text = `Analyzing files... (${current}/${total})`;
+            }
+          : undefined;
 
-      const analysis = await analyzer.analyzeProject(searchPath, progressCallback);
+      const analysis = await analyzer.analyzeProject(
+        searchPath,
+        progressCallback,
+      );
 
       if (spinner) {
-        spinner.succeed(`Analyzed ${analysis.totalFiles} file${analysis.totalFiles !== 1 ? 's' : ''}`);
+        spinner.succeed(
+          `Analyzed ${analysis.totalFiles} file${
+            analysis.totalFiles !== 1 ? 's' : ''
+          }`,
+        );
       }
 
       let output: string;

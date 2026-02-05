@@ -4,7 +4,7 @@
 [![npm dm](https://img.shields.io/npm/dm/imports-detector)](https://www.npmjs.com/package/imports-detector)
 [![npm dw](https://img.shields.io/npm/dw/imports-detector)](https://www.npmjs.com/package/imports-detector)
 [![npm](https://img.shields.io/npm/l/imports-detector)](https://www.npmjs.com/package/imports-detector)
-[![GitHub stars](https://img.shields.io/github/stars/al-maqdi/imports-detector?style=social)](https://github.com/almaqdi/imports-detector)
+[![GitHub stars](https://img.shields.io/github/stars/almaqdi/imports-detector?style=social)](https://github.com/almaqdi/imports-detector)
 
 A powerful package for detecting and analyzing imports in JavaScript/TypeScript applications. Find files importing specific modules, list all imports, and generate comprehensive dependency reports.
 
@@ -103,17 +103,19 @@ Find files importing a module from a **specific path** (useful when you have mul
 
 ```bash
 # Find files importing Dashboard specifically from the admin folder
-imports-detector find Dashboard --module-path admin/Dashboard ./src
+imports-detector find Dashboard --module-path admin/Dashboard.tsx ./src
 
 # Find files importing Test from components folder
-imports-detector find Test --module-path components/Test ./src
+imports-detector find Test --module-path components/Test.tsx ./src
 
 # Find files importing Test using full path
-imports-detector find Test --module-path src/components/Test ./src
+imports-detector find Test --module-path src/components/Test.tsx ./src
 
 # Find files importing Test from test fixtures
-imports-detector find Test --module-path tests/fixtures/sample-project/src/components/Test ./src
+imports-detector find Test --module-path tests/fixtures/sample-project/src/components/Test.tsx ./src
 ```
+
+> **💡 Best Practice:** Include the file extension (`.tsx`, `.ts`, `.js`, `.jsx`) in `--module-path` for more precise matching. You can copy-paste the file path directly from your IDE!
 
 This is especially useful when you have multiple components with the same name:
 
@@ -127,6 +129,41 @@ src/
 ```
 
 Running `imports-detector find Dashboard --module-path admin/Dashboard ./src` will only find files that import from the `admin/Dashboard` path, not the `components/Dashboard` path.
+
+##### Find All Imports from a File (Regardless of Import Name)
+
+**NEW:** You can now omit the module name when using `--module-path` to find **ALL imports** from a specific file, even if they're imported with different names:
+
+```bash
+# Find ALL imports from Lazyload.tsx (any imported name)
+imports-detector find --module-path src/components/global/atoms/Lazyload/Lazyload.tsx ./src
+
+# This will find ALL of these:
+# ✅ import { Lazyload } from './Lazyload'
+# ✅ import { LazyLoad } from './Lazyload'  (different name!)
+# ✅ import MyComponent from './Lazyload'  (default export with custom name!)
+# ✅ const Lazyload = lazy(() => import('./Lazyload'))
+```
+
+This is especially useful for:
+- **Finding renamed imports** - When components are imported with different names
+- **Finding default exports** - When files use custom names for default exports
+- **Finding lazy imports** - When using React.lazy or dynamic import()
+- **Comprehensive analysis** - When you want to see EVERY usage of a file
+
+**Example:**
+```bash
+# Without module name: finds imports with ANY name
+imports-detector find --module-path src/components/Header.tsx ./src
+
+# Output shows all imports, even with different names:
+# src/App.tsx
+#   📦 ./Header (default): Header (line 1)
+# src/Layout.tsx
+#   📦 ./Header (default): AppHeader (line 3)  ← Different name!
+# src/pages/Home.tsx
+#   ⚡ ./Header (line 5)  ← Lazy import!
+```
 
 ##### Path Matching Examples
 
@@ -143,8 +180,8 @@ imports-detector find Dashboard --module-path ./admin/Dashboard ./src
 **Example 2: Full paths**
 
 ```bash
-# Using full path to the Test component
-imports-detector find Test --module-path tests/fixtures/sample-project/src/components/Test ./src
+# Using full path to the Test component (with extension for precision)
+imports-detector find Test --module-path tests/fixtures/sample-project/src/components/Test.tsx ./src
 
 # This will find:
 # ✅ import { Test } from './components/Test'
@@ -157,7 +194,7 @@ imports-detector find Test --module-path tests/fixtures/sample-project/src/compo
 
 ```bash
 # Find imports from a deeply nested component
-imports-detector find UserCard --module-path src/components/admin/users/UserCard ./src
+imports-detector find UserCard --module-path src/components/admin/users/UserCard.tsx ./src
 
 # This matches:
 # ✅ import { UserCard } from '../admin/users/UserCard'
@@ -174,7 +211,7 @@ imports-detector find UserCard --module-path src/components/admin/users/UserCard
 # - src/admin/Header.tsx
 
 # Find only imports of the admin Header:
-imports-detector find Header --module-path src/admin/Header ./src
+imports-detector find Header --module-path src/admin/Header.tsx ./src
 
 # Result: Only files importing from the admin/Header path
 ```
@@ -183,10 +220,10 @@ imports-detector find Header --module-path src/admin/Header ./src
 
 ```bash
 # Find files importing a test utility
-imports-detector find Test --module-path tests/fixtures/sample-project/src/components/Test ./src
+imports-detector find Test --module-path tests/fixtures/sample-project/src/components/Test.tsx ./src
 
 # Or using relative path from search directory
-imports-detector find Test --module-path components/Test ./src
+imports-detector find Test --module-path components/Test.tsx ./src
 ```
 
 **How Path Matching Works:**
@@ -205,7 +242,7 @@ The path matching is intelligent and handles:
 
    ```bash
    # Good: Specific
-   imports-detector find Header --module-path src/layouts/Header ./src
+   imports-detector find Header --module-path src/layouts/Header.tsx ./src
 
    # Less specific: May find too many results
    imports-detector find Header ./src
@@ -215,10 +252,10 @@ The path matching is intelligent and handles:
 
    ```bash
    # If your code imports like: import { X } from '@/components/Test'
-   # Use: imports-detector find Test --module-path components/Test ./src
+   # Use: imports-detector find Test --module-path components/Test.tsx ./src
 
    # If your code imports like: import { X } from '../../src/components/Test'
-   # Use: imports-detector find Test --module-path src/components/Test ./src
+   # Use: imports-detector find Test --module-path src/components/Test.tsx ./src
    ```
 
 3. **Test with broader search first, then narrow down:**
@@ -227,8 +264,8 @@ The path matching is intelligent and handles:
    # Step 1: See all Test imports
    imports-detector find Test ./src
 
-   # Step 2: Narrow to specific path
-   imports-detector find Test --module-path components/Test ./src
+   # Step 2: Narrow to specific path (with extension for precision)
+   imports-detector find Test --module-path components/Test.tsx ./src
    ```
 
 ### List All Imports
@@ -277,7 +314,7 @@ imports-detector report ./src --output report.json --format json
 Global options:
 
 - `--path <path>` - Root directory to analyze
-- `--module-path <path>` - Specific module path to match (e.g., `admin/Dashboard`)
+- `--module-path <path>` - Specific module path to match (e.g., `admin/Dashboard.tsx`). **Best Practice:** Include the file extension for precise matching.
 - `--base-url <url>` - Base URL for module resolution (overrides tsconfig)
 - `--tsconfig <path>` - Path to tsconfig.json for automatic baseUrl detection
 - `--include <patterns>` - File extensions to include (comma-separated)
@@ -296,8 +333,8 @@ Examples:
 # Find files importing React
 imports-detector find React --path ./src
 
-# Find files importing Dashboard from admin folder only
-imports-detector find Dashboard --module-path admin/Dashboard --path ./src
+# Find files importing Dashboard from admin folder only (with extension for precision)
+imports-detector find Dashboard --module-path admin/Dashboard.tsx --path ./src
 
 # Find files using TypeScript baseUrl (auto-detected from tsconfig.json)
 imports-detector find ImportBulkSchedulers --path ./src

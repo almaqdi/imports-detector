@@ -65,12 +65,12 @@ export class ImportAnalyzer {
 
   /**
    * Find all files that import a specific module
-   * @param moduleName - Name of the module to search for (e.g., 'Test', 'react')
+   * @param moduleName - Name of the module to search for (e.g., 'Test', 'react'), or null to match all imports from target path
    * @param searchPath - Root directory to search
    * @param progressCallback - Optional callback for progress updates
    */
   async findFilesImporting(
-    moduleName: string,
+    moduleName: string | null,
     searchPath: string,
     progressCallback?: ProgressCallback
   ): Promise<ImporterResult[]> {
@@ -87,7 +87,7 @@ export class ImportAnalyzer {
       }
 
       // Resolve the target module path if provided
-      const targetPath = this.resolveTargetPath(searchPath, moduleName, resolver);
+      const targetPath = this.resolveTargetPath(searchPath, resolver);
 
       for (let i = 0; i < files.length; i++) {
         const filePath = files[i];
@@ -125,7 +125,7 @@ export class ImportAnalyzer {
 
       return results;
     } catch (error) {
-      throw new Error(`Failed to find files importing "${moduleName}": ${error}`);
+      throw new Error(`Failed to find files importing "${moduleName || 'module'}": ${error}`);
     }
   }
 
@@ -133,18 +133,29 @@ export class ImportAnalyzer {
    * Resolve the target path for module matching
    * If modulePath is specified, resolve it to an absolute path
    */
-  private resolveTargetPath(searchPath: string, moduleName: string, resolver: ModuleResolver): string | null {
+  private resolveTargetPath(searchPath: string, resolver: ModuleResolver): string | null {
     if (!this.options.modulePath) {
       return null;
     }
 
-    // Resolve the module path relative to search path
-    const resolved = resolver.resolveImport(
-      this.options.modulePath,
-      searchPath + '/dummy.ts' // Dummy file for relative resolution
-    );
+    let modulePath = this.options.modulePath;
 
-    return resolved;
+    // Convert to absolute path
+    // If modulePath is already absolute, use it directly
+    // Otherwise, resolve it relative to the current working directory (not searchPath)
+    // to avoid double path issues like src/src/...
+    const absolutePath = path.isAbsolute(modulePath)
+      ? modulePath
+      : path.resolve(process.cwd(), modulePath);
+
+    // If it already has an extension, use it directly (no need to resolve through resolver)
+    if (path.extname(absolutePath)) {
+      return absolutePath;
+    }
+
+    // Otherwise, use the module resolver to find the file with extensions
+    // We pass searchPath as the fromFile to avoid double path issues
+    return resolver.resolveImport(absolutePath, searchPath);
   }
 
   /**
@@ -234,14 +245,14 @@ export class ImportAnalyzer {
    * Filter imports by module name using proper module resolution
    * This mimics how IDEs resolve imports (like "command + click")
    * @param imports - All imports from a file
-   * @param moduleName - Name of the module to match
+   * @param moduleName - Name of the module to match, or null to match only by path
    * @param filePath - Path of the file containing the imports
    * @param targetPath - Optional resolved target path for path-specific matching
    * @param resolver - Module resolver instance
    */
   private filterImportsByModule(
     imports: Import[],
-    moduleName: string,
+    moduleName: string | null,
     filePath: string,
     targetPath: string | null,
     resolver: ModuleResolver
@@ -259,7 +270,16 @@ export class ImportAnalyzer {
 
       // If targetPath is provided, use exact path matching
       if (targetPath) {
-        return resolver.pathsMatch(resolved, targetPath);
+        const matches = resolver.pathsMatch(resolved, targetPath);
+        if (this.options.verbose && !matches) {
+          console.error(`  [DEBUG] Path mismatch: import "${imp.module}" -> resolved: "${resolved}" != target: "${targetPath}"`);
+        }
+        return matches;
+      }
+
+      // If moduleName is null and no targetPath, include all imports
+      if (!moduleName) {
+        return true;
       }
 
       // Otherwise, match by module name (backward compatibility)
