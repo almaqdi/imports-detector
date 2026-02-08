@@ -1,18 +1,25 @@
 {
   "name": "imports-detector",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Detect and analyze imports in JavaScript/TypeScript applications. Find files importing specific modules, list all imports, and generate dependency reports.",
   "main": "dist/index.js",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
     "imports-detector": "./bin/cli.js"
   },
-  "type": "module",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "cli": "node bin/cli.js",
     "prepublishOnly": "npm run build",
-    "test": "echo \"Tests not yet implemented\""
+    "test": "node tests/basic.test.js",
+    "test:watch": "node --watch tests/basic.test.js"
   },
   "keywords": [
     "imports",

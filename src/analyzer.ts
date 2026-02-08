@@ -3,6 +3,7 @@ import { FileDiscovery } from './file-discovery.js';
 import { CodeParser } from './parser.js';
 import { ImportExtractor } from './extractor.js';
 import { ModuleResolver } from './module-resolver.js';
+import { ImportType } from './types.js';
 import type {
   DetectorOptions,
   FileImports,
@@ -91,17 +92,24 @@ export class ImportAnalyzer {
       // Resolve the target module path if provided
       const targetPath = this.resolveTargetPath(searchPath, resolver);
 
+      // Pre-parse all files once to avoid re-parsing in barrel detection
+      const fileImportsMap = new Map<string, Import[]>();
+      const failedFiles: string[] = [];
+
       for (let i = 0; i < files.length; i++) {
         const filePath = files[i];
 
-        // Report progress
-        if (progressCallback) {
+        // Report progress every 100 files to avoid blocking the event loop
+        if (progressCallback && i % 100 === 0) {
           progressCallback(i + 1, files.length);
+          // Yield to event loop to allow spinner animation
+          await Promise.resolve();
         }
 
         try {
           const ast = this.parser.parseFile(filePath);
           const allImports = this.extractor.getAllImports(ast);
+          fileImportsMap.set(filePath, allImports);
 
           // Resolve imports and filter by module name
           const matchingImports = this.filterImportsByModule(
@@ -112,58 +120,87 @@ export class ImportAnalyzer {
             resolver
           );
 
-          if (matchingImports.length > 0) {
+          // Filter by import type based on options
+          const filteredImports = this.filterImportsByType(matchingImports);
+
+          if (filteredImports.length > 0) {
             results.push({
               file: filePath,
-              imports: matchingImports,
+              imports: filteredImports,
             });
-
-            // NEW: Check if this file is a barrel that re-exports the target
-            // If so, find all files that import through this barrel
-            if (targetPath) {
-              const barrelCheck = this.isBarrelForModule(
-                filePath,
-                targetPath,
-                moduleName,
-                resolver
-              );
-
-              if (barrelCheck.isBarrel) {
-                if (this.options.verbose) {
-                  console.log(`Found barrel file: ${filePath}`);
-                  console.log(`  Re-exports: ${barrelCheck.exportedNames.join(', ')}`);
-                }
-
-                // Find all files that import from this barrel
-                const barrelConsumers = await this.findBarrelConsumers(
-                  filePath,
-                  barrelCheck.exportedNames,
-                  searchPath,
-                  resolver,
-                  visitedBarrels
-                );
-
-                // Add barrel consumers to results
-                for (const consumer of barrelConsumers) {
-                  // Check if this consumer is already in results
-                  const existing = results.find(r => r.file === consumer.file);
-                  if (existing) {
-                    // Merge imports
-                    existing.imports.push(...consumer.imports);
-                  } else {
-                    results.push(consumer);
-                  }
-                }
-
-                if (this.options.verbose) {
-                  console.log(`  Found ${barrelConsumers.length} files importing through this barrel`);
-                }
-              }
-            }
           }
         } catch (error) {
           if (this.options.verbose) {
             console.error(`Error parsing ${filePath}:`, error);
+          }
+          failedFiles.push(filePath);
+        }
+      }
+
+      // Report any failed files
+      if (failedFiles.length > 0 && this.options.verbose) {
+        console.warn(`Failed to parse ${failedFiles.length} files. Use --verbose for details.`);
+      }
+
+      // Now check for barrel files using the pre-parsed imports
+      if (targetPath) {
+        for (const result of results) {
+          const barrelCheck = this.isBarrelForModule(
+            result.file,
+            targetPath,
+            moduleName,
+            resolver
+          );
+
+          if (barrelCheck.isBarrel) {
+            if (this.options.verbose) {
+              console.log(`Found barrel file: ${result.file}`);
+              console.log(`  Re-exports: ${barrelCheck.exportedNames.join(', ')}`);
+            }
+
+            // Find all files that import from this barrel using cached imports
+            const barrelConsumers = this.findBarrelConsumers(
+              result.file,
+              barrelCheck.exportedNames,
+              fileImportsMap,
+              resolver,
+              visitedBarrels
+            );
+
+            // Add barrel consumers to results
+            for (const consumer of barrelConsumers) {
+              // Filter barrel consumer imports by type before adding
+              const filteredConsumerImports = this.filterImportsByType(consumer.imports);
+
+              if (filteredConsumerImports.length === 0) {
+                continue; // Skip if no imports match the type filter
+              }
+
+              // Check if this consumer is already in results
+              const existing = results.find(r => r.file === consumer.file);
+              if (existing) {
+                // Merge imports, avoiding duplicates
+                for (const imp of filteredConsumerImports) {
+                  const isDuplicate = existing.imports.some(existingImp =>
+                    existingImp.module === imp.module &&
+                    existingImp.line === imp.line &&
+                    existingImp.type === imp.type
+                  );
+                  if (!isDuplicate) {
+                    existing.imports.push(imp);
+                  }
+                }
+              } else {
+                results.push({
+                  file: consumer.file,
+                  imports: filteredConsumerImports,
+                });
+              }
+            }
+
+            if (this.options.verbose) {
+              console.log(`  Found ${barrelConsumers.length} files importing through this barrel`);
+            }
           }
         }
       }
@@ -224,9 +261,11 @@ export class ImportAnalyzer {
       for (let i = 0; i < files.length; i++) {
         const filePath = files[i];
 
-        // Report progress
-        if (progressCallback) {
+        // Report progress every 100 files to avoid blocking the event loop
+        if (progressCallback && i % 100 === 0) {
           progressCallback(i + 1, files.length);
+          // Yield to event loop to allow spinner animation
+          await Promise.resolve();
         }
 
         try {
@@ -356,6 +395,28 @@ export class ImportAnalyzer {
   }
 
   /**
+   * Filter imports by type based on detector options
+   * @param imports - Imports to filter
+   * @returns Filtered imports based on detect options
+   */
+  private filterImportsByType(imports: Import[]): Import[] {
+    return imports.filter((imp) => {
+      switch (imp.type) {
+        case ImportType.STATIC:
+          return this.options.detectStatic !== false;
+        case ImportType.DYNAMIC:
+          return this.options.detectDynamic !== false;
+        case ImportType.LAZY:
+          return this.options.detectLazy !== false;
+        case ImportType.REQUIRE:
+          return this.options.detectRequire !== false;
+        default:
+          return true;
+      }
+    });
+  }
+
+  /**
    * Check if a file is a barrel that re-exports a specific module
    * @param barrelFilePath - Path to the potential barrel file
    * @param targetModulePath - Path to the target module we're looking for
@@ -416,18 +477,18 @@ export class ImportAnalyzer {
    * Find all files that import from a barrel (transitive import detection)
    * @param barrelFilePath - Path to the barrel file
    * @param exportedNames - Names that are re-exported from the barrel
-   * @param searchPath - Root directory to search
+   * @param fileImportsMap - Pre-parsed map of file → imports (to avoid re-scanning)
    * @param resolver - Module resolver instance
    * @param visited - Set of already visited barrels (to prevent infinite recursion)
    * @returns Files that import from the barrel
    */
-  private async findBarrelConsumers(
+  private findBarrelConsumers(
     barrelFilePath: string,
     exportedNames: string[],
-    searchPath: string,
+    fileImportsMap: Map<string, Import[]>,
     resolver: ModuleResolver,
     visited: Set<string>
-  ): Promise<ImporterResult[]> {
+  ): ImporterResult[] {
     const results: ImporterResult[] = [];
 
     // Prevent infinite recursion
@@ -437,20 +498,14 @@ export class ImportAnalyzer {
     visited.add(barrelFilePath);
 
     try {
-      const files = await this.fileDiscovery.findFiles(searchPath);
-      const barrelDir = path.dirname(barrelFilePath);
-
-      // Find files that import from this barrel
-      for (const filePath of files) {
+      // Use pre-parsed imports instead of re-scanning
+      for (const [filePath, allImports] of fileImportsMap.entries()) {
         // Skip the barrel file itself
         if (filePath === barrelFilePath) {
           continue;
         }
 
         try {
-          const ast = this.parser.parseFile(filePath);
-          const allImports = this.extractor.getAllImports(ast);
-
           // Check if this file imports from the barrel
           const barrelImports = allImports.filter((imp) => {
             const resolved = resolver.resolveImport(imp.module, filePath);
@@ -480,7 +535,7 @@ export class ImportAnalyzer {
           }
         } catch (error) {
           if (this.options.verbose) {
-            console.error(`Error parsing ${filePath}:`, error);
+            console.error(`Error processing ${filePath}:`, error);
           }
         }
       }
