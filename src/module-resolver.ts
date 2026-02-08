@@ -43,11 +43,6 @@ export class ModuleResolver {
       if (result && result.config.compilerOptions?.baseUrl) {
         const configDir = path.dirname(result.path);
         this.baseUrl = path.resolve(configDir, result.config.compilerOptions.baseUrl);
-
-        if (this.baseUrl) {
-          // Log that we found and are using baseUrl
-          console.warn(`Using baseUrl from tsconfig: ${this.baseUrl}`);
-        }
       }
     } catch (error) {
       // Silently fall back if config reading fails

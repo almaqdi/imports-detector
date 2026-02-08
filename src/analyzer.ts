@@ -96,45 +96,52 @@ export class ImportAnalyzer {
       const fileImportsMap = new Map<string, Import[]>();
       const failedFiles: string[] = [];
 
-      for (let i = 0; i < files.length; i++) {
-        const filePath = files[i];
+      // Process files in batches for better performance and smoother spinner animation
+      const BATCH_SIZE = 20;
 
-        // Report progress every 100 files to avoid blocking the event loop
-        if (progressCallback && i % 100 === 0) {
-          progressCallback(i + 1, files.length);
-          // Yield to event loop to allow spinner animation
-          await Promise.resolve();
+      for (let i = 0; i < files.length; i += BATCH_SIZE) {
+        const batch = files.slice(i, i + BATCH_SIZE);
+
+        // Process each file in the current batch
+        for (const filePath of batch) {
+          try {
+            const ast = this.parser.parseFile(filePath);
+            const allImports = this.extractor.getAllImports(ast);
+            fileImportsMap.set(filePath, allImports);
+
+            // Resolve imports and filter by module name
+            const matchingImports = this.filterImportsByModule(
+              allImports,
+              moduleName,
+              filePath,
+              targetPath,
+              resolver
+            );
+
+            // Filter by import type based on options
+            const filteredImports = this.filterImportsByType(matchingImports);
+
+            if (filteredImports.length > 0) {
+              results.push({
+                file: filePath,
+                imports: filteredImports,
+              });
+            }
+          } catch (error) {
+            if (this.options.verbose) {
+              console.error(`Error parsing ${filePath}:`, error);
+            }
+            failedFiles.push(filePath);
+          }
         }
 
-        try {
-          const ast = this.parser.parseFile(filePath);
-          const allImports = this.extractor.getAllImports(ast);
-          fileImportsMap.set(filePath, allImports);
-
-          // Resolve imports and filter by module name
-          const matchingImports = this.filterImportsByModule(
-            allImports,
-            moduleName,
-            filePath,
-            targetPath,
-            resolver
-          );
-
-          // Filter by import type based on options
-          const filteredImports = this.filterImportsByType(matchingImports);
-
-          if (filteredImports.length > 0) {
-            results.push({
-              file: filePath,
-              imports: filteredImports,
-            });
-          }
-        } catch (error) {
-          if (this.options.verbose) {
-            console.error(`Error parsing ${filePath}:`, error);
-          }
-          failedFiles.push(filePath);
+        // Report progress after each batch
+        if (progressCallback) {
+          progressCallback(Math.min(i + BATCH_SIZE, files.length), files.length);
         }
+
+        // Yield to event loop after each batch
+        await new Promise(resolve => setImmediate(resolve));
       }
 
       // Report any failed files
@@ -258,36 +265,43 @@ export class ImportAnalyzer {
       let totalLazy = 0;
       let totalRequire = 0;
 
-      for (let i = 0; i < files.length; i++) {
-        const filePath = files[i];
+      // Process files in batches for better performance and smoother spinner animation
+      const BATCH_SIZE = 20;
 
-        // Report progress every 100 files to avoid blocking the event loop
-        if (progressCallback && i % 100 === 0) {
-          progressCallback(i + 1, files.length);
-          // Yield to event loop to allow spinner animation
-          await Promise.resolve();
-        }
+      for (let i = 0; i < files.length; i += BATCH_SIZE) {
+        const batch = files.slice(i, i + BATCH_SIZE);
 
-        try {
-          const ast = this.parser.parseFile(filePath);
-          const fileImports = this.extractor.extractAll(ast, {
-            static: this.options.detectStatic,
-            dynamic: this.options.detectDynamic,
-            lazy: this.options.detectLazy,
-            require: this.options.detectRequire,
-          });
+        // Process each file in the current batch
+        for (const filePath of batch) {
+          try {
+            const ast = this.parser.parseFile(filePath);
+            const fileImports = this.extractor.extractAll(ast, {
+              static: this.options.detectStatic,
+              dynamic: this.options.detectDynamic,
+              lazy: this.options.detectLazy,
+              require: this.options.detectRequire,
+            });
 
-          filesMap[filePath] = fileImports;
+            filesMap[filePath] = fileImports;
 
-          totalStatic += fileImports.static.length;
-          totalDynamic += fileImports.dynamic.length;
-          totalLazy += fileImports.lazy.length;
-          totalRequire += fileImports.require.length;
-        } catch (error) {
-          if (this.options.verbose) {
-            console.error(`Error parsing ${filePath}:`, error);
+            totalStatic += fileImports.static.length;
+            totalDynamic += fileImports.dynamic.length;
+            totalLazy += fileImports.lazy.length;
+            totalRequire += fileImports.require.length;
+          } catch (error) {
+            if (this.options.verbose) {
+              console.error(`Error parsing ${filePath}:`, error);
+            }
           }
         }
+
+        // Report progress after each batch
+        if (progressCallback) {
+          progressCallback(Math.min(i + BATCH_SIZE, files.length), files.length);
+        }
+
+        // Yield to event loop after each batch
+        await new Promise(resolve => setImmediate(resolve));
       }
 
       const totalImports = totalStatic + totalDynamic + totalLazy + totalRequire;
