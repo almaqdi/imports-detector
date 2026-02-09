@@ -16,7 +16,7 @@ program
   .description(
     'Detect and analyze imports in JavaScript/TypeScript applications',
   )
-  .version('0.2.6');
+  .version('0.2.9');
 
 /**
  * Parse detector options from CLI flags

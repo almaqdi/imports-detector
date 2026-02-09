@@ -17,6 +17,7 @@ export type {
   DetectorOptions,
   FileImports,
   Import,
+  ImportMap,
   ImporterResult,
   OutputFormat,
   OutputOptions,
@@ -46,4 +47,31 @@ export async function analyzeProject(
 ) {
   const analyzer = new ImportAnalyzer(options);
   return analyzer.analyzeProject(searchPath);
+}
+
+/**
+ * Convenience function to find unused files in a project
+ * This is much more efficient than calling findFilesImporting() for each file
+ */
+export async function findUnusedFiles(
+  searchPath: string,
+  options?: {
+    filePattern?: string;
+    progressCallback?: import('./types.js').ProgressCallback;
+  } & import('./types.js').DetectorOptions
+) {
+  const analyzer = new ImportAnalyzer(options);
+  return analyzer.findUnusedFiles(searchPath, options);
+}
+
+/**
+ * Convenience function to build a comprehensive import map
+ * Useful for advanced analysis, dependency graphs, and custom queries
+ */
+export async function buildImportMap(
+  searchPath: string,
+  options?: import('./types.js').DetectorOptions
+) {
+  const analyzer = new ImportAnalyzer(options);
+  return analyzer.buildImportMap(searchPath);
 }

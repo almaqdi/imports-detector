@@ -131,3 +131,30 @@ export interface Export {
   /** Export kind: 'named' or 'default' */
   kind: 'named' | 'default';
 }
+
+/**
+ * Import map showing bidirectional import relationships
+ */
+export interface ImportMap {
+  /** Forward lookup: what each file imports */
+  imports: {
+    [filePath: string]: {
+      static: Import[];
+      dynamic: Import[];
+      lazy: Import[];
+      require: Import[];
+    };
+  };
+  /** Reverse lookup: what imports each file */
+  importedBy: {
+    [filePath: string]: string[];
+  };
+  /** Statistics about the import map */
+  stats: {
+    totalFiles: number;
+    totalImports: number;
+    mostImportedFiles: Array<{ filePath: string; importCount: number }>;
+    leastImportedFiles: Array<{ filePath: string; importCount: number }>;
+  };
+}
+

@@ -10,6 +10,7 @@ import type {
   ImporterResult,
   ProjectAnalysis,
   Import,
+  ImportMap,
   ProgressCallback,
   Export,
 } from './types.js';
@@ -337,6 +338,150 @@ export class ImportAnalyzer {
     } catch (error) {
       throw new Error(`Failed to analyze file ${filePath}: ${error}`);
     }
+  }
+
+  /**
+   * Find all files that are not imported anywhere in the project
+   * This is MUCH more efficient than checking each file individually with findFilesImporting()
+   * @param searchPath - Root directory to analyze
+   * @param options - Options for filtering unused files
+   * @returns Array of unused file paths with metadata
+   */
+  async findUnusedFiles(
+    searchPath: string,
+    options?: {
+      /** Only check files matching this pattern (e.g., '/components/') */
+      filePattern?: string;
+      /** Progress callback for large projects */
+      progressCallback?: ProgressCallback;
+    }
+  ): Promise<Array<{ filePath: string; reason: string }>> {
+    // Single scan of all files
+    const analysis = await this.analyzeProject(
+      searchPath,
+      options?.progressCallback
+    );
+
+    const resolver = this.createResolver(searchPath);
+    const unusedFiles: Array<{ filePath: string; reason: string }> = [];
+
+    // Build a set of all imported files (resolved paths)
+    const importedFiles = new Set<string>();
+
+    for (const [filePath, fileData] of Object.entries(analysis.files)) {
+      const allImports = [
+        ...fileData.static,
+        ...fileData.dynamic,
+        ...fileData.lazy,
+        ...fileData.require,
+      ];
+
+      for (const imp of allImports) {
+        const resolved = resolver.resolveImport(imp.module, filePath);
+        if (resolved) {
+          importedFiles.add(resolved);
+        }
+      }
+    }
+
+    // Find files that are never imported
+    for (const filePath of Object.keys(analysis.files)) {
+      // Skip files that don't match the pattern
+      if (options?.filePattern && !filePath.includes(options.filePattern)) {
+        continue;
+      }
+
+      // Check if this file is imported anywhere
+      if (!importedFiles.has(filePath)) {
+        unusedFiles.push({
+          filePath,
+          reason: 'No imports found',
+        });
+      }
+    }
+
+    return unusedFiles;
+  }
+
+  /**
+   * Build a comprehensive import map showing bidirectional import relationships
+   * This is useful for advanced analysis, dependency graphs, and custom queries
+   * @param searchPath - Root directory to analyze
+   * @param progressCallback - Optional callback for progress updates
+   * @returns Import map with forward/reverse lookups and statistics
+   */
+  async buildImportMap(
+    searchPath: string,
+    progressCallback?: ProgressCallback
+  ): Promise<ImportMap> {
+    // Single scan of all files
+    const analysis = await this.analyzeProject(searchPath, progressCallback);
+    const resolver = this.createResolver(searchPath);
+
+    // Build forward and reverse lookup maps
+    const imports: ImportMap['imports'] = {};
+    const importedBy: ImportMap['importedBy'] = {};
+    const importCounts = new Map<string, number>();
+
+    // Initialize imports map
+    for (const [filePath, fileData] of Object.entries(analysis.files)) {
+      imports[filePath] = {
+        static: fileData.static,
+        dynamic: fileData.dynamic,
+        lazy: fileData.lazy,
+        require: fileData.require,
+      };
+    }
+
+    // Build reverse lookup (importedBy) and count imports
+    for (const [filePath, fileData] of Object.entries(analysis.files)) {
+      const allImports = [
+        ...fileData.static,
+        ...fileData.dynamic,
+        ...fileData.lazy,
+        ...fileData.require,
+      ];
+
+      for (const imp of allImports) {
+        const resolved = resolver.resolveImport(imp.module, filePath);
+        if (resolved) {
+          // Track what imports this file
+          if (!importedBy[resolved]) {
+            importedBy[resolved] = [];
+          }
+          if (!importedBy[resolved].includes(filePath)) {
+            importedBy[resolved].push(filePath);
+          }
+
+          // Count imports for statistics
+          importCounts.set(resolved, (importCounts.get(resolved) || 0) + 1);
+        }
+      }
+    }
+
+    // Build statistics
+    const sortedByImportCount = Array.from(importCounts.entries())
+      .sort((a, b) => b[1] - a[1]);
+
+    const mostImportedFiles = sortedByImportCount
+      .slice(0, 10)
+      .map(([filePath, importCount]) => ({ filePath, importCount }));
+
+    const leastImportedFiles = sortedByImportCount
+      .slice(-10)
+      .reverse()
+      .map(([filePath, importCount]) => ({ filePath, importCount }));
+
+    return {
+      imports,
+      importedBy,
+      stats: {
+        totalFiles: Object.keys(imports).length,
+        totalImports: Array.from(importCounts.values()).reduce((sum, count) => sum + count, 0),
+        mostImportedFiles,
+        leastImportedFiles,
+      },
+    };
   }
 
   /**
