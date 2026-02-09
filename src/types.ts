@@ -130,6 +130,8 @@ export interface Export {
   localName: string;
   /** Export kind: 'named' or 'default' */
   kind: 'named' | 'default';
+  /** Source module (for re-exports like 'export { foo } from "./bar"') */
+  source?: string;
 }
 
 /**

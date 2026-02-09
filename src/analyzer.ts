@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs';
 import { FileDiscovery } from './file-discovery.js';
 import { CodeParser } from './parser.js';
 import { ImportExtractor } from './extractor.js';
@@ -384,6 +385,36 @@ export class ImportAnalyzer {
       }
     }
 
+    // Build a map of barrel files and what they export
+    // This is needed to detect files that are used through barrel re-exports
+    const barrelExports = new Map<string, string[]>();
+    for (const [filePath, fileData] of Object.entries(analysis.files)) {
+      // Check if this file is a barrel (index.ts or index.js)
+      const fileName = path.basename(filePath);
+      if (fileName !== 'index.ts' && fileName !== 'index.js') {
+        continue;
+      }
+
+      // Get exports from this barrel file
+      const ast = this.parser.parseFile(filePath);
+      const exports = this.extractor.extractExports(ast);
+
+      // For each export, find what file it exports
+      for (const exp of exports) {
+        // For re-exports, use the source field
+        const importPath = exp.source || exp.localName;
+        const resolvedExport = resolver.resolveImport(importPath, filePath);
+
+        if (resolvedExport && resolvedExport !== filePath) {
+          // This barrel exports this file
+          if (!barrelExports.has(filePath)) {
+            barrelExports.set(filePath, []);
+          }
+          barrelExports.get(filePath)!.push(resolvedExport);
+        }
+      }
+    }
+
     // Find files that are never imported
     for (const filePath of Object.keys(analysis.files)) {
       // Skip files that don't match the pattern
@@ -392,7 +423,20 @@ export class ImportAnalyzer {
       }
 
       // Check if this file is imported anywhere
-      if (!importedFiles.has(filePath)) {
+      let isUsed = importedFiles.has(filePath);
+
+      // If not directly imported, check if it's exported by a used barrel
+      if (!isUsed) {
+        for (const [barrelPath, exportedFiles] of barrelExports.entries()) {
+          if (exportedFiles.includes(filePath) && importedFiles.has(barrelPath)) {
+            // File is used through this barrel
+            isUsed = true;
+            break;
+          }
+        }
+      }
+
+      if (!isUsed) {
         unusedFiles.push({
           filePath,
           reason: 'No imports found',
@@ -513,7 +557,30 @@ export class ImportAnalyzer {
 
       // If targetPath is provided, use exact path matching
       if (targetPath) {
-        const matches = resolver.pathsMatch(resolved, targetPath);
+        let matches = resolver.pathsMatch(resolved, targetPath);
+
+        // If not a direct match, check if target has a sibling barrel file
+        if (!matches) {
+          const targetDir = path.dirname(targetPath);
+          const targetName = path.basename(targetPath, path.extname(targetPath));
+          const barrelPath = path.join(targetDir, 'index.ts');
+          const barrelPathJs = path.join(targetDir, 'index.js');
+
+          // Check if barrel file exists and if import matches it
+          try {
+            // Try TypeScript barrel first
+            if (fs.existsSync(barrelPath) && fs.statSync(barrelPath).isFile()) {
+              matches = resolver.pathsMatch(resolved, barrelPath);
+            }
+            // Fallback to JavaScript barrel
+            if (!matches && fs.existsSync(barrelPathJs) && fs.statSync(barrelPathJs).isFile()) {
+              matches = resolver.pathsMatch(resolved, barrelPathJs);
+            }
+          } catch {
+            // Barrel doesn't exist, keep matches as false
+          }
+        }
+
         if (this.options.verbose && !matches) {
           console.error(`  [DEBUG] Path mismatch: import "${imp.module}" -> resolved: "${resolved}" != target: "${targetPath}"`);
         }

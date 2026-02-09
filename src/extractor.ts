@@ -316,6 +316,7 @@ export class ImportExtractor {
                   name: exportedName,
                   localName,
                   kind: 'named',
+                  source: node.source.value,
                 });
               }
             }
