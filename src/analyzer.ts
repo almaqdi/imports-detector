@@ -366,8 +366,31 @@ export class ImportAnalyzer {
     const resolver = this.createResolver(searchPath);
     const unusedFiles: Array<{ filePath: string; reason: string }> = [];
 
-    // Collect all imports from all files
-    const allImports: Array<{ imp: Import; fromFile: string; resolved: string }> = [];
+    // TRULY O(n) APPROACH:
+    // Instead of O(n²) "check each file against all imports",
+    // we do O(n) "build set of imported files, then check membership"
+
+    // Step 1: Build a set of files that have sibling barrel files
+    const filesWithBarrel = new Set<string>();
+    for (const filePath of Object.keys(analysis.files)) {
+      const targetDir = path.dirname(filePath);
+      const barrelPathTs = path.join(targetDir, 'index.ts');
+      const barrelPathJs = path.join(targetDir, 'index.js');
+
+      try {
+        if ((fs.existsSync(barrelPathTs) && fs.statSync(barrelPathTs).isFile()) ||
+            (fs.existsSync(barrelPathJs) && fs.statSync(barrelPathJs).isFile())) {
+          filesWithBarrel.add(filePath);
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
+
+    // Step 2: Build set of all files that are directly imported
+    const directlyImported = new Set<string>();
+    const barrelFilesImported = new Set<string>();
+
     for (const [filePath, fileData] of Object.entries(analysis.files)) {
       const imports = [
         ...fileData.static,
@@ -379,22 +402,34 @@ export class ImportAnalyzer {
       for (const imp of imports) {
         const resolved = resolver.resolveImport(imp.module, filePath);
         if (resolved) {
-          allImports.push({ imp, fromFile: filePath, resolved });
+          directlyImported.add(resolved);
+
+          // If it's an index file, mark that the parent directory was imported
+          if (resolved.endsWith('index.ts') || resolved.endsWith('index.js')) {
+            barrelFilesImported.add(resolved);
+          }
         }
       }
     }
 
-    // Find files that are never imported
+    // Step 3: Check each file (O(n) with O(1) Set lookups)
     for (const filePath of Object.keys(analysis.files)) {
       // Skip files that don't match the pattern
       if (options?.filePattern && !filePath.includes(options.filePattern)) {
         continue;
       }
 
-      // Check if this file is imported by anything
-      const isUsed = allImports.some(({ resolved }) =>
-        this.matchesImportToFile(resolved, filePath, resolver)
-      );
+      // Check if file is used (O(1) lookup)
+      let isUsed = directlyImported.has(filePath);
+
+      // If not directly imported, check if it has a sibling barrel that was imported
+      if (!isUsed && filesWithBarrel.has(filePath)) {
+        const targetDir = path.dirname(filePath);
+        const barrelPathTs = path.join(targetDir, 'index.ts');
+        const barrelPathJs = path.join(targetDir, 'index.js');
+
+        isUsed = barrelFilesImported.has(barrelPathTs) || barrelFilesImported.has(barrelPathJs);
+      }
 
       if (!isUsed) {
         unusedFiles.push({
