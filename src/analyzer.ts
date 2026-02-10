@@ -366,8 +366,8 @@ export class ImportAnalyzer {
     const resolver = this.createResolver(searchPath);
     const unusedFiles: Array<{ filePath: string; reason: string }> = [];
 
-    // Collect all imports from all files for comprehensive checking
-    const allImports: Array<{ imp: Import; fromFile: string }> = [];
+    // Collect all imports from all files
+    const allImports: Array<{ imp: Import; fromFile: string; resolved: string }> = [];
     for (const [filePath, fileData] of Object.entries(analysis.files)) {
       const imports = [
         ...fileData.static,
@@ -377,7 +377,10 @@ export class ImportAnalyzer {
       ];
 
       for (const imp of imports) {
-        allImports.push({ imp, fromFile: filePath });
+        const resolved = resolver.resolveImport(imp.module, filePath);
+        if (resolved) {
+          allImports.push({ imp, fromFile: filePath, resolved });
+        }
       }
     }
 
@@ -389,21 +392,9 @@ export class ImportAnalyzer {
       }
 
       // Check if this file is imported by anything
-      // This handles:
-      // - Direct imports
-      // - Named barrel exports (export { foo } from './bar')
-      // - Default barrel exports (export { default } from './bar')
-      // - Wildcard barrel exports (export * from './bar')
-      // - Sibling barrel file imports (import from './dir' resolves to './dir/index.ts')
-      let isUsed = false;
-
-      for (const { imp, fromFile } of allImports) {
-        const resolved = resolver.resolveImport(imp.module, fromFile);
-        if (resolved && this.matchesImportToFile(resolved, filePath, resolver)) {
-          isUsed = true;
-          break;
-        }
-      }
+      const isUsed = allImports.some(({ resolved }) =>
+        this.matchesImportToFile(resolved, filePath, resolver)
+      );
 
       if (!isUsed) {
         unusedFiles.push({
