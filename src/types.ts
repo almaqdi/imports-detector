@@ -132,6 +132,8 @@ export interface Export {
   kind: 'named' | 'default';
   /** Source module (for re-exports like 'export { foo } from "./bar"') */
   source?: string;
+  /** Wildcard re-export (e.g., 'export * from "./module"') */
+  wildcard?: boolean;
 }
 
 /**

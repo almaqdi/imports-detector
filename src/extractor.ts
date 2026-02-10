@@ -342,6 +342,19 @@ export class ImportExtractor {
         }
       },
 
+      // Handle wildcard exports: export * from './module'
+      ExportAllDeclaration(path: NodePath<t.ExportAllDeclaration>) {
+        const node = path.node;
+
+        exports.push({
+          name: '*',
+          localName: '*',
+          kind: 'named',
+          source: node.source.value,
+          wildcard: true,
+        });
+      },
+
       // Handle export declarations
       ExportDeclaration(path: NodePath<any>) {
         const node = path.node;
